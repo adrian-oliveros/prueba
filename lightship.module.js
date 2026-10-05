@@ -1,5 +1,4 @@
 // Lightship WebAR SDK - Local Module Version
-// (Bloque 1/4)
 
 export class Lightship {
     static async create(options = {}) {
@@ -15,6 +14,7 @@ export class Lightship {
         this.gl = null;
         this.xrRefSpace = null;
         this._frameCallback = null;
+        this._hitTestSource = null;
     }
 
     async _init() {
@@ -34,13 +34,27 @@ export class Lightship {
         });
 
         this.gl = this.canvas.getContext("webgl", { xrCompatible: true });
+
         await this.session.updateRenderState({
             baseLayer: new XRWebGLLayer(this.session, this.gl)
         });
 
         this.xrRefSpace = await this.session.requestReferenceSpace("local");
 
+        if (this.features.includes("hit-test")) {
+            await this._initHitTest();
+        }
+
         this.session.requestAnimationFrame(this._onXRFrame.bind(this));
+
+        console.log("Lightship local module cargado correctamente.");
+    }
+
+    async _initHitTest() {
+        const viewerSpace = await this.session.requestReferenceSpace("viewer");
+        this._hitTestSource = await this.session.requestHitTestSource({
+            space: viewerSpace
+        });
     }
 
     _onXRFrame(t, frame) {
@@ -60,69 +74,23 @@ export class Lightship {
     }
 
     getHitTestPose(frame) {
-        try {
-            const results = frame.getHitTestResults(this._hitTestSource);
-            if (results.length > 0) {
-                return results[0].getPose(this.xrRefSpace);
-            }
-        } catch (e) {}
+        if (!this._hitTestSource) return null;
+
+        const results = frame.getHitTestResults(this._hitTestSource);
+        if (results.length > 0) {
+            return results[0].getPose(this.xrRefSpace);
+        }
+
         return null;
     }
 
-    async enableHitTest() {
-        const viewerSpace = await this.session.requestReferenceSpace("viewer");
-        this._hitTestSource = await this.session.requestHitTestSource({
-            space: viewerSpace
-        });
+    start() {
+        this.session.requestAnimationFrame(this._onXRFrame.bind(this));
+    }
+
+    stop() {
+        if (this.session) {
+            this.session.end();
+        }
     }
 }
-// Lightship WebAR SDK - Local Module Version
-// (Bloque 2/4)
-
-Lightship.prototype._initHitTest = async function () {
-    if (!this.features.includes("hit-test")) return;
-
-    const viewerSpace = await this.session.requestReferenceSpace("viewer");
-    this._hitTestSource = await this.session.requestHitTestSource({
-        space: viewerSpace
-    });
-};
-
-Lightship.prototype._initMeshing = async function () {
-    if (!this.features.includes("meshing")) return;
-
-    try {
-        await this.session.requestMeshDetection();
-    } catch (e) {
-        console.warn("Meshing no soportado:", e);
-    }
-};
-// Lightship WebAR SDK - Local Module Version
-// (Bloque 3/4)
-
-Lightship.prototype._onXRFrame = function (t, frame) {
-    const session = frame.session;
-    session.requestAnimationFrame(this._onXRFrame.bind(this));
-
-    const pose = frame.getViewerPose(this.xrRefSpace);
-    if (!pose) return;
-
-    if (this._frameCallback) {
-        this._frameCallback(t, frame, pose);
-    }
-};
-
-Lightship.prototype.start = function () {
-    this.session.requestAnimationFrame(this._onXRFrame.bind(this));
-};
-// Lightship WebAR SDK - Local Module Version
-// (Bloque 4/4)
-
-Lightship.prototype.stop = function () {
-    if (this.session) {
-        this.session.end();
-    }
-};
-
-console.log("Lightship local module cargado correctamente.");
-
