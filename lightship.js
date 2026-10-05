@@ -1,5 +1,4 @@
 // Lightship WebAR SDK - Loader (local)
-// Este archivo expone Lightship como variable global para index.html
 
 import { Lightship } from "./lightship.module.js";
 
