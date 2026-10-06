@@ -1,15 +1,41 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lightship WebAR</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CV AR</title>
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        #ar-container {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+            "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+        }
+    }
+    </script>
 </head>
 
-<body style="margin:0; overflow:hidden;">
-    <canvas id="xr-canvas"></canvas>
+<body>
 
-    <script type="module" src="./lightship.js"></script>
-    <script type="module" src="./app.js"></script>
+<div id="ar-container"></div>
+
+<script type="module" src="./app.js"></script>
+
 </body>
 </html>
