@@ -48,9 +48,6 @@ loader.load(
                 action.play();
             });
         }
-
-        // El modelo NO se añade al anchor
-        // Se añadirá a worldObject cuando el QR se detecte
     },
 
     undefined,
@@ -60,20 +57,31 @@ loader.load(
     }
 );
 
-// Cuando el QR se detecta → "spawn" del perro
+// Cuando el QR se detecta → el perro aparece EXACTAMENTE en el QR
 anchor.onTargetFound = () => {
     if (!model) return;
 
-    // Copiar posición y rotación del QR
-    worldObject.position.copy(anchor.group.position);
-    worldObject.quaternion.copy(anchor.group.quaternion);
+    // Esperar 1 frame para que MindAR actualice la posición real del QR
+    requestAnimationFrame(() => {
 
-    // Añadir el modelo al mundo persistente
-    scene.add(model);
+        const qrWorldPosition = new THREE.Vector3();
+        anchor.group.getWorldPosition(qrWorldPosition);
 
-    // Colocar el modelo en la posición del QR
-    model.position.copy(worldObject.position);
-    model.quaternion.copy(worldObject.quaternion);
+        const qrWorldQuaternion = new THREE.Quaternion();
+        anchor.group.getWorldQuaternion(qrWorldQuaternion);
+
+        worldObject.position.copy(qrWorldPosition);
+        worldObject.quaternion.copy(qrWorldQuaternion);
+
+        if (!scene.children.includes(model)) {
+            scene.add(model);
+        }
+
+        model.position.copy(worldObject.position);
+        model.quaternion.copy(worldObject.quaternion);
+
+        console.log("Perro spawneado en el QR:", model.position);
+    });
 };
 
 // Cuando el QR se pierde → NO ocultamos nada
