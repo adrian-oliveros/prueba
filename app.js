@@ -1,4 +1,3 @@
-```javascript
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MindARThree } from "mindar-image-three";
@@ -28,10 +27,6 @@ scene.add(light);
 // Anclaje al QR
 const anchor = mindarThree.addAnchor(0);
 
-// Contenedor independiente del tracking
-const flightRoot = new THREE.Group();
-scene.add(flightRoot);
-
 // Cargar avión
 const loader = new GLTFLoader();
 
@@ -54,8 +49,13 @@ loader.load(
             0.1
         );
 
-        // El avión NO pertenece al anchor
-        flightRoot.add(model);
+        // IMPORTANTE:
+        // El avión pertenece directamente a la escena,
+        // NO al anchor.
+        scene.add(model);
+
+        // Al principio está oculto
+        model.visible = false;
 
         // Animaciones del GLB
         let mixer = null;
@@ -70,7 +70,6 @@ loader.load(
             });
         }
 
-        // Indica si ya hemos fijado la posición inicial
         let flightStarted = false;
 
         const clock = new THREE.Clock();
@@ -79,25 +78,20 @@ loader.load(
 
             const delta = clock.getDelta();
 
-            // Mientras el QR se está viendo,
-            // usamos su posición SOLO para colocar
-            // el avión inicialmente.
+            // El QR solamente sirve para colocar
+            // el avión la primera vez.
             if (!flightStarted && anchor.visible) {
 
-                anchor.group.updateWorldMatrix(true, false);
+                model.position.copy(anchor.group.position);
+                model.quaternion.copy(anchor.group.quaternion);
 
-                anchor.group.getWorldPosition(
-                    flightRoot.position
-                );
-
-                anchor.group.getWorldQuaternion(
-                    flightRoot.quaternion
-                );
+                model.visible = true;
 
                 flightStarted = true;
             }
 
-            // La animación continúa SIEMPRE
+            // La animación del GLB continúa aunque
+            // el QR deje de detectarse.
             if (mixer) {
                 mixer.update(delta);
             }
@@ -115,4 +109,3 @@ loader.load(
 
 // Iniciar AR
 await mindarThree.start();
-```
