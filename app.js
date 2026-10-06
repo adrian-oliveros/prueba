@@ -1,55 +1,94 @@
-import { Lightship } from "./lightship.module.js";
-import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js";
-import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/GLTFLoader.js";
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { MindARThree } from "mindar-image-three";
 
-const canvas = document.getElementById("xr-canvas");
+const container = document.querySelector("#ar-container");
 
-// Inicializar Lightship
-const xr = await Lightship.create({
-    canvas,
-    features: ["hit-test", "meshing"],
+const mindarThree = new MindARThree({
+    container: container,
+    imageTargetSrc: "./qr.mind",
+    maxTrack: 1,
+    uiLoading: "yes",
+    uiScanning: "yes",
+    uiError: "yes"
 });
 
-// Escena Three.js
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
-const renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
+const { renderer, scene, camera } = mindarThree;
 
 // Luz
-const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
+const light = new THREE.HemisphereLight(
+    0xffffff,
+    0x444444,
+    2
+);
+
 scene.add(light);
 
-// Cargar modelo
+// Anclaje al QR
+const anchor = mindarThree.addAnchor(0);
+
+// Cargar avión
 const loader = new GLTFLoader();
-let model;
 
 loader.load(
     "./model.glb",
+
     (gltf) => {
-        model = gltf.scene;
-        model.scale.set(0.5, 0.5, 0.5);
-        model.visible = false;
-        scene.add(model);
+
+        const model = gltf.scene;
+
+        model.scale.set(
+            0.3,
+            0.3,
+            0.3
+        );
+
+        model.position.set(
+            0,
+            0,
+            0.1
+        );
+
+        anchor.group.add(model);
+
+        // Animaciones del GLB
+        if (gltf.animations && gltf.animations.length > 0) {
+
+            const mixer = new THREE.AnimationMixer(model);
+
+            gltf.animations.forEach((clip) => {
+                const action = mixer.clipAction(clip);
+                action.play();
+            });
+
+            let previousTime = 0;
+
+            renderer.setAnimationLoop(() => {
+
+                const currentTime = performance.now() / 1000;
+
+                const delta = currentTime - previousTime;
+                previousTime = currentTime;
+
+                mixer.update(delta);
+
+                renderer.render(scene, camera);
+            });
+
+        } else {
+
+            renderer.setAnimationLoop(() => {
+                renderer.render(scene, camera);
+            });
+        }
     },
+
     undefined,
+
     (error) => {
-        console.error("Error cargando GLB:", error);
+        console.error("Error cargando model.glb:", error);
     }
 );
 
-// Colocar modelo con hit-test
-xr.session.addEventListener("select", (event) => {
-    const pose = xr.getHitTestPose(event.frame);
-    if (pose && model) {
-        model.position.copy(pose.transform.position);
-        model.quaternion.copy(pose.transform.orientation);
-        model.visible = true;
-    }
-});
-
-// Loop de render
-xr.session.requestAnimationFrame(function onXRFrame(t, frame) {
-    xr.session.requestAnimationFrame(onXRFrame);
-    renderer.render(scene, camera);
-});
+// Iniciar AR
+await mindarThree.start();
