@@ -16,11 +16,7 @@ const mindarThree = new MindARThree({
 
 const { renderer, scene, camera } = mindarThree;
 
-
-// ======================================================
-// LUZ
-// ======================================================
-
+// Luz
 const light = new THREE.HemisphereLight(
     0xffffff,
     0x444444,
@@ -29,33 +25,14 @@ const light = new THREE.HemisphereLight(
 
 scene.add(light);
 
-
-// ======================================================
-// ANCLA DEL QR
-// ======================================================
-
+// Anclaje al QR
 const anchor = mindarThree.addAnchor(0);
 
-
-// ======================================================
-// CONTENEDOR INDEPENDIENTE DEL QR
-// ======================================================
-//
-// IMPORTANTE:
-// Este objeto NO pertenece al anchor de MindAR.
-// Por eso MindAR nunca podrá ocultarlo cuando pierda
-// el QR.
-//
-
+// Contenedor independiente del tracking
 const flightRoot = new THREE.Group();
-
 scene.add(flightRoot);
 
-
-// ======================================================
-// CARGAR AVIÓN
-// ======================================================
-
+// Cargar avión
 const loader = new GLTFLoader();
 
 loader.load(
@@ -65,21 +42,11 @@ loader.load(
 
         const model = gltf.scene;
 
-
-        // --------------------------------------------------
-        // ESCALA
-        // --------------------------------------------------
-
         model.scale.set(
             0.3,
             0.3,
             0.3
         );
-
-
-        // --------------------------------------------------
-        // POSICIÓN INICIAL RESPECTO AL QR
-        // --------------------------------------------------
 
         model.position.set(
             0,
@@ -87,69 +54,37 @@ loader.load(
             0.1
         );
 
-
-        // --------------------------------------------------
-        // EL AVIÓN PERTENECE AL CONTENEDOR INDEPENDIENTE
-        // --------------------------------------------------
-
+        // El avión NO pertenece al anchor
         flightRoot.add(model);
 
-
-        // ==================================================
-        // ANIMACIÓN DEL GLB
-        // ==================================================
-
+        // Animaciones del GLB
         let mixer = null;
 
-        if (
-            gltf.animations &&
-            gltf.animations.length > 0
-        ) {
+        if (gltf.animations && gltf.animations.length > 0) {
 
             mixer = new THREE.AnimationMixer(model);
 
             gltf.animations.forEach((clip) => {
-
                 const action = mixer.clipAction(clip);
-
                 action.play();
-
             });
-
         }
 
-
-        // ==================================================
-        // RELOJ DE ANIMACIÓN
-        // ==================================================
+        // Indica si ya hemos fijado la posición inicial
+        let flightStarted = false;
 
         const clock = new THREE.Clock();
-
-
-        // ==================================================
-        // BUCLE PRINCIPAL
-        // ==================================================
 
         renderer.setAnimationLoop(() => {
 
             const delta = clock.getDelta();
 
+            // Mientras el QR se está viendo,
+            // usamos su posición SOLO para colocar
+            // el avión inicialmente.
+            if (!flightStarted && anchor.visible) {
 
-            // ------------------------------------------------
-            // 1. SI EL QR ESTÁ VISIBLE
-            // ------------------------------------------------
-            //
-            // Copiamos la posición del QR al flightRoot.
-            //
-            // El avión NO está dentro del anchor.
-            //
-
-            if (anchor.visible) {
-
-                anchor.group.updateWorldMatrix(
-                    true,
-                    false
-                );
+                anchor.group.updateWorldMatrix(true, false);
 
                 anchor.group.getWorldPosition(
                     flightRoot.position
@@ -159,64 +94,25 @@ loader.load(
                     flightRoot.quaternion
                 );
 
-                anchor.group.getWorldScale(
-                    flightRoot.scale
-                );
-
+                flightStarted = true;
             }
 
-
-            // ------------------------------------------------
-            // 2. ANIMACIÓN DEL AVIÓN
-            // ------------------------------------------------
-            //
-            // Esto continúa SIEMPRE.
-            //
-            // Da igual si:
-            // - el QR está visible
-            // - el QR se ha perdido
-            // - el avión está dentro de pantalla
-            // - el avión está fuera de pantalla
-            //
-
+            // La animación continúa SIEMPRE
             if (mixer) {
-
                 mixer.update(delta);
-
             }
 
-
-            // ------------------------------------------------
-            // 3. RENDER
-            // ------------------------------------------------
-
-            renderer.render(
-                scene,
-                camera
-            );
-
+            renderer.render(scene, camera);
         });
-
     },
-
 
     undefined,
 
-
     (error) => {
-
-        console.error(
-            "Error cargando model.glb:",
-            error
-        );
-
+        console.error("Error cargando model.glb:", error);
     }
 );
 
-
-// ======================================================
-// INICIAR AR
-// ======================================================
-
+// Iniciar AR
 await mindarThree.start();
 ```
