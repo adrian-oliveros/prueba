@@ -1,3 +1,4 @@
+```javascript
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MindARThree } from "mindar-image-three";
@@ -49,38 +50,68 @@ loader.load(
             0.1
         );
 
+        // Primero lo colocamos en el QR
         anchor.group.add(model);
 
-        // Animaciones del GLB
+        // ------------------------------------------------
+        // CUANDO SE DETECTA EL QR POR PRIMERA VEZ
+        // ------------------------------------------------
+        let detached = false;
+
+        anchor.onTargetFound = () => {
+
+            // Solo lo hacemos una vez
+            if (detached) return;
+
+            detached = true;
+
+            /*
+             * Sacamos el avión del anchor.
+             *
+             * THREE.attach() conserva automáticamente
+             * su posición, rotación y escala en el mundo.
+             *
+             * A partir de aquí el avión YA NO depende
+             * del tracking del QR.
+             */
+            scene.attach(model);
+
+            console.log("Avión liberado del tracking del QR");
+        };
+
+        // ------------------------------------------------
+        // ANIMACIONES DEL GLB
+        // ------------------------------------------------
+
+        let mixer = null;
+
         if (gltf.animations && gltf.animations.length > 0) {
 
-            const mixer = new THREE.AnimationMixer(model);
+            mixer = new THREE.AnimationMixer(model);
 
             gltf.animations.forEach((clip) => {
+
                 const action = mixer.clipAction(clip);
+
                 action.play();
             });
-
-            let previousTime = 0;
-
-            renderer.setAnimationLoop(() => {
-
-                const currentTime = performance.now() / 1000;
-
-                const delta = currentTime - previousTime;
-                previousTime = currentTime;
-
-                mixer.update(delta);
-
-                renderer.render(scene, camera);
-            });
-
-        } else {
-
-            renderer.setAnimationLoop(() => {
-                renderer.render(scene, camera);
-            });
         }
+
+        // Reloj independiente del tracking
+        const clock = new THREE.Clock();
+
+        renderer.setAnimationLoop(() => {
+
+            const delta = clock.getDelta();
+
+            // La animación continúa aunque el avión
+            // esté fuera del encuadre.
+            if (mixer) {
+                mixer.update(delta);
+            }
+
+            renderer.render(scene, camera);
+        });
     },
 
     undefined,
@@ -92,3 +123,4 @@ loader.load(
 
 // Iniciar AR
 await mindarThree.start();
+```
