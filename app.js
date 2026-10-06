@@ -49,55 +49,38 @@ loader.load(
             0.1
         );
 
-        // IMPORTANTE:
-        // El avión pertenece directamente a la escena,
-        // NO al anchor.
-        scene.add(model);
-
-        // Al principio está oculto
-        model.visible = false;
+        anchor.group.add(model);
 
         // Animaciones del GLB
-        let mixer = null;
-
         if (gltf.animations && gltf.animations.length > 0) {
 
-            mixer = new THREE.AnimationMixer(model);
+            const mixer = new THREE.AnimationMixer(model);
 
             gltf.animations.forEach((clip) => {
                 const action = mixer.clipAction(clip);
                 action.play();
             });
-        }
 
-        let flightStarted = false;
+            let previousTime = 0;
 
-        const clock = new THREE.Clock();
+            renderer.setAnimationLoop(() => {
 
-        renderer.setAnimationLoop(() => {
+                const currentTime = performance.now() / 1000;
 
-            const delta = clock.getDelta();
+                const delta = currentTime - previousTime;
+                previousTime = currentTime;
 
-            // El QR solamente sirve para colocar
-            // el avión la primera vez.
-            if (!flightStarted && anchor.visible) {
-
-                model.position.copy(anchor.group.position);
-                model.quaternion.copy(anchor.group.quaternion);
-
-                model.visible = true;
-
-                flightStarted = true;
-            }
-
-            // La animación del GLB continúa aunque
-            // el QR deje de detectarse.
-            if (mixer) {
                 mixer.update(delta);
-            }
 
-            renderer.render(scene, camera);
-        });
+                renderer.render(scene, camera);
+            });
+
+        } else {
+
+            renderer.setAnimationLoop(() => {
+                renderer.render(scene, camera);
+            });
+        }
     },
 
     undefined,
