@@ -1,173 +1,120 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { ARButton } from "three/addons/webxr/ARButton.js";
+import { MindARThree } from "mindar-image-three";
 
-let container;
-let camera, scene, renderer;
-let controller;
+const container = document.querySelector("#ar-container");
 
-let reticle;
-let hitTestSource = null;
-let hitTestSourceRequested = false;
+// Inicialización de MindAR
+const mindarThree = new MindARThree({
+    container: container,
+    imageTargetSrc: "./qr.mind",
+    maxTrack: 1,
+    uiLoading: "yes",
+    uiScanning: "yes",
+    uiError: "yes"
+});
 
+const { renderer, scene, camera } = mindarThree;
+
+// Iluminación completa
+const ambientLight = new THREE.AmbientLight(0xffffff, 2.5);
+scene.add(ambientLight);
+
+const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
+directionalLight.position.set(1, 4, 3);
+scene.add(directionalLight);
+
+// Anchor del QR (Índice 0)
+const anchor = mindarThree.addAnchor(0);
+
+// Carga de modelo y animaciones
+const loader = new GLTFLoader();
 let model = null;
 let mixer = null;
 let hasSpawned = false;
 
 const clock = new THREE.Clock();
-const overlay = document.getElementById("overlay");
 
-// Elementos para el escaneo de QR vía video
-let videoElement = document.createElement("video");
-let canvasElement = document.createElement("canvas");
-let canvasCtx = canvasElement.getContext("2d");
+loader.load(
+    "./model.glb",
+    (gltf) => {
+        model = gltf.scene;
 
-init();
+        // Ajuste de escala inicial
+        model.scale.set(0.3, 0.3, 0.3);
 
-function init() {
-    container = document.createElement("div");
-    document.body.appendChild(container);
+        // Inicializar animaciones GLTF
+        if (gltf.animations && gltf.animations.length > 0) {
+            mixer = new THREE.AnimationMixer(model);
+            gltf.animations.forEach((clip) => {
+                const action = mixer.clipAction(clip);
+                action.play();
+            });
+        }
 
-    scene = new THREE.Scene();
+        // Lo añadimos temporalmente al anchor para el primer encuadre
+        anchor.group.add(model);
+        model.visible = false; // Permanece oculto hasta escaneo
+    },
+    undefined,
+    (error) => console.error("Error al cargar model.glb:", error)
+);
 
-    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+// Evento: Al detectar el QR por primera vez
+anchor.onTargetFound = () => {
+    if (!model || hasSpawned) return;
 
-    // Iluminación
-    const ambientLight = new THREE.AmbientLight(0xffffff, 2.0);
-    scene.add(ambientLight);
+    // Esperar a que la cámara posicione correctamente el objeto
+    requestAnimationFrame(() => {
+        // 1. Forzar la actualización de las matrices tridimensionales
+        anchor.group.updateMatrixWorld(true);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 2.5);
-    directionalLight.position.set(0, 6, 0);
-    scene.add(directionalLight);
+        // 2. Extraer la posición y rotación exactas en el espacio del MUNDO
+        const worldPosition = new THREE.Vector3();
+        const worldQuaternion = new THREE.Quaternion();
+        const worldScale = new THREE.Vector3();
 
-    // Renderer con soporte WebXR
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.xr.enabled = true;
-    container.appendChild(renderer.domElement);
+        anchor.group.matrixWorld.decompose(worldPosition, worldQuaternion, worldScale);
 
-    // Botón para iniciar la experiencia WebXR
-    document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ["hit-test"] }));
+        // 3. Mover el perro directamente a la ESCENA GLOBAL
+        scene.add(model);
 
-    // Cargar modelo 3D GLTF
-    const loader = new GLTFLoader();
-    loader.load(
-        "./model.glb",
-        (gltf) => {
-            model = gltf.scene;
-            model.scale.set(0.2, 0.2, 0.2);
+        // 4. Aplicar la posición guardada
+        model.position.copy(worldPosition);
+        model.quaternion.copy(worldQuaternion);
+        model.scale.copy(worldScale);
+        model.visible = true;
 
-            if (gltf.animations && gltf.animations.length > 0) {
-                mixer = new THREE.AnimationMixer(model);
-                gltf.animations.forEach((clip) => {
-                    mixer.clipAction(clip).play();
-                });
-            }
-        },
-        undefined,
-        (err) => console.error("Error al cargar model.glb:", err)
-    );
+        // 5. Bloquear para que no vuelva a recalcularse
+        hasSpawned = true;
 
-    // Retículo visual para indicar la superficie detectada
-    reticle = new THREE.Mesh(
-        new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-    );
-    reticle.matrixAutoUpdate = false;
-    reticle.visible = false;
-    scene.add(reticle);
+        console.log("¡Perro instanciado de forma permanente en el mundo!", model.position);
+    });
+};
 
-    window.addEventListener("resize", onWindowResize);
-
-    // Loop de render de WebXR
-    renderer.setAnimationLoop(render);
-}
-
-function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-// Escáner de QR utilizando las texturas de la cámara
-function scanQRCode() {
-    if (hasSpawned || !model) return null;
-
-    // Extraer dimensiones del viewport
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-
-    if (canvasElement.width !== width) {
-        canvasElement.width = width;
-        canvasElement.height = height;
+// Evitar que MindAR oculte cosas al perder el QR
+anchor.onTargetLost = () => {
+    if (model && hasSpawned) {
+        model.visible = true;
     }
+};
 
-    // Dibujar el fotograma actual de WebGL en el canvas
-    canvasCtx.drawImage(renderer.domElement, 0, 0, width, height);
-    const imageData = canvasCtx.getImageData(0, 0, width, height);
-
-    // Decodificar con jsQR
-    const code = jsQR(imageData.data, imageData.width, imageData.height);
-    return code;
-}
-
-function render(timestamp, frame) {
+// Bucle de renderizado
+renderer.setAnimationLoop(() => {
     const delta = clock.getDelta();
 
-    if (mixer) mixer.update(delta);
+    // Actualizar animación
+    if (mixer) {
+        mixer.update(delta);
+    }
 
-    if (frame) {
-        const referenceSpace = renderer.xr.getReferenceSpace();
-        const session = renderer.xr.getSession();
-
-        // Solicitar Hit-Test Source para el seguimiento de la superficie física
-        if (!hitTestSourceRequested) {
-            session.requestReferenceSpace("viewer").then((viewerSpace) => {
-                session.requestHitTestSource({ space: viewerSpace }).then((source) => {
-                    hitTestSource = source;
-                });
-            });
-
-            session.addEventListener("end", () => {
-                hitTestSourceRequested = false;
-                hitTestSource = null;
-            });
-
-            hitTestSourceRequested = true;
-        }
-
-        // Evaluar las colisiones con el suelo en tiempo real
-        if (hitTestSource) {
-            const hitTestResults = frame.getHitTestResults(hitTestSource);
-
-            if (hitTestResults.length > 0) {
-                const hit = hitTestResults[0];
-                const pose = hit.getPose(referenceSpace);
-
-                reticle.visible = !hasSpawned;
-                reticle.matrix.fromArray(pose.transform.matrix);
-
-                // Escanear QR en busca de la activación
-                const qrCode = scanQRCode();
-
-                if (qrCode && !hasSpawned) {
-                    // "Hacer nacer" al perrete en las coordenadas físicas del retículo/suelo
-                    model.position.setFromMatrixPosition(reticle.matrix);
-                    model.quaternion.setFromRotationMatrix(reticle.matrix);
-
-                    scene.add(model);
-                    hasSpawned = true;
-                    reticle.visible = false;
-
-                    overlay.innerText = "¡El perrete ha nacido! Puedes moverte libremente.";
-                    setTimeout(() => { overlay.style.display = "none"; }, 4000);
-                }
-            } else {
-                reticle.visible = false;
-            }
-        }
+    // Forzar visibilidad del modelo si ya ha nacido
+    if (hasSpawned && model) {
+        model.visible = true;
     }
 
     renderer.render(scene, camera);
-}
+});
+
+// Iniciar sesión AR
+await mindarThree.start();
