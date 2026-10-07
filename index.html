@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Portfolio AR - Curriculum</title>
 
     <style>
@@ -12,7 +12,7 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background-color: #0d0f12;
+            background-color: #000;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
 
@@ -26,166 +26,226 @@
             z-index: 1;
         }
 
+        #canvas3d {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+        }
+
         #status-bar {
             position: absolute;
-            top: 25px;
+            top: 20px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 10;
             background: rgba(15, 23, 42, 0.9);
-            color: #f8fafc;
+            color: #ffffff;
             padding: 12px 24px;
             border-radius: 30px;
             font-size: 14px;
             font-weight: 500;
             text-align: center;
             border: 1px solid rgba(255, 255, 255, 0.15);
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-            pointer-events: none;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            pointer-events: auto;
             backdrop-filter: blur(8px);
         }
 
-        model-viewer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 5;
-            display: none;
-            --poster-color: transparent;
-        }
-
-        /* Botón de bienvenida profesional para lanzar la AR */
-        #ar-button {
+        #start-btn {
             background: linear-gradient(135deg, #2563eb, #1d4ed8);
-            color: #ffffff;
-            border-radius: 50px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            position: absolute;
-            bottom: 45px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 16px 32px;
-            font-size: 15px;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
             font-weight: 600;
-            letter-spacing: 0.3px;
-            box-shadow: 0 12px 30px rgba(37, 99, 235, 0.4);
-            z-index: 20;
+            font-size: 13px;
+            margin-left: 10px;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        #ar-button:active {
-            transform: translateX(-50%) scale(0.96);
-            box-shadow: 0 6px 15px rgba(37, 99, 235, 0.3);
         }
     </style>
 
-    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+    <!-- Importmap con Three.js y DeviceOrientationControls -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 </head>
 
 <body>
 
-<div id="status-bar">Apunta la cámara al QR de mi currículum...</div>
+<div id="status-bar">
+    <span id="status-text">Apunta la cámara al QR de mi currículum...</span>
+    <button id="start-btn" style="display:none;">Activar Movimiento AR</button>
+</div>
 
 <video id="webcam" autoplay playsinline muted></video>
+<canvas id="canvas3d"></canvas>
 
-<!-- 
-  Ajustes clave añadidos:
-  - scale="0.2 0.2 0.2": Ajusta el tamaño para que sea un perro a escala real.
-  - ar-placement="floor": Le dice al móvil que busque el suelo/mesa para permitirte acercarte.
-  - ar-scale="fixed": Evita que el perro cambie de tamaño al alejarte/acercarte.
--->
-<model-viewer 
-    id="dog-viewer"
-    src="./model.glb"
-    alt="Animación 3D Portfolio"
-    ar
-    ar-modes="webxr scene-viewer quick-look"
-    ar-placement="floor"
-    ar-scale="fixed"
-    scale="0.2 0.2 0.2"
-    camera-controls
-    autoplay
-    shadow-intensity="1">
-    
-    <button slot="ar-button" id="ar-button">
-        ✨ Toca aquí para ver la animación en tu suelo/mesa
-    </button>
-</model-viewer>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { DeviceOrientationControls } from "three/addons/controls/DeviceOrientationControls.js";
 
-<script>
-    const video = document.getElementById("webcam");
-    const statusBar = document.getElementById("status-bar");
-    const dogViewer = document.getElementById("dog-viewer");
+const video = document.getElementById("webcam");
+const canvas3d = document.getElementById("canvas3d");
+const statusText = document.getElementById("status-text");
+const startBtn = document.getElementById("start-btn");
 
-    const scanCanvas = document.createElement("canvas");
-    const scanCtx = scanCanvas.getContext("2d");
-    let hasSpawned = false;
+const scanCanvas = document.createElement("canvas");
+const scanCtx = scanCanvas.getContext("2d");
 
-    // Reproducir la animación inmediatamente al cargar el archivo 3D
-    dogViewer.addEventListener("load", () => {
-        const availableAnimations = dogViewer.availableAnimations;
-        if (availableAnimations && availableAnimations.length > 0) {
-            dogViewer.animationName = availableAnimations[0];
-            dogViewer.play();
-        }
-    });
+// Renderizador 3D sobre el visor de la cámara
+const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, alpha: true, antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
 
-    async function startCamera() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "environment" }
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 0, 0);
+
+// Controles por giroscopio para seguimiento de orientación espacial
+let controls = new DeviceOrientationControls(camera);
+
+// Iluminación
+const ambientLight = new THREE.AmbientLight(0xffffff, 2.5);
+scene.add(ambientLight);
+
+const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
+directionalLight.position.set(2, 5, 5);
+scene.add(directionalLight);
+
+let model = null;
+let mixer = null;
+let hasSpawned = false;
+const clock = new THREE.Clock();
+
+// Carga del modelo GLTF
+const loader = new GLTFLoader();
+loader.load(
+    "./model.glb",
+    (gltf) => {
+        model = gltf.scene;
+        model.scale.set(0.2, 0.2, 0.2); // Tamaño adecuado a mascota
+
+        if (gltf.animations && gltf.animations.length > 0) {
+            mixer = new THREE.AnimationMixer(model);
+            gltf.animations.forEach((clip) => {
+                mixer.clipAction(clip).play();
             });
-            video.srcObject = stream;
-            await video.play();
-            requestAnimationFrame(scanQR);
-        } catch (err) {
-            statusBar.innerText = "Error accediendo a la cámara: " + err.message;
         }
+    },
+    undefined,
+    (err) => console.error("Error al cargar model.glb:", err)
+);
+
+async function startCamera() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" }
+        });
+        video.srcObject = stream;
+        await video.play();
+
+        // Solicitar permisos de giroscopio en dispositivos iOS si es necesario
+        if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+            startBtn.style.display = "inline-block";
+            startBtn.addEventListener("click", () => {
+                DeviceOrientationEvent.requestPermission().then(response => {
+                    if (response === "granted") {
+                        controls.connect();
+                        startBtn.style.display = "none";
+                    }
+                }).catch(console.error);
+            });
+        } else {
+            controls.connect();
+        }
+    } catch (err) {
+        statusText.innerText = "Error accediendo a la cámara: " + err.message;
+    }
+}
+
+// Calcular las coordenadas 3D del código QR en el espacio real
+function calculateQRWorldPosition(location) {
+    const centerX = (location.topLeftCorner.x + location.topRightCorner.x + location.bottomRightCorner.x + location.bottomLeftCorner.x) / 4;
+    const centerY = (location.topLeftCorner.y + location.topRightCorner.y + location.bottomRightCorner.y + location.bottomLeftCorner.y) / 4;
+
+    const ndcX = (centerX / video.videoWidth) * 2 - 1;
+    const ndcY = -(centerY / video.videoHeight) * 2 + 1;
+
+    const side1 = Math.hypot(location.topRightCorner.x - location.topLeftCorner.x, location.topRightCorner.y - location.topLeftCorner.y);
+    const side2 = Math.hypot(location.bottomRightCorner.x - location.bottomLeftCorner.x, location.bottomLeftCorner.y - location.bottomLeftCorner.y);
+    const avgWidth = (side1 + side2) / 2;
+
+    // Calcular la profundidad según la escala del QR en la imagen
+    const estimatedDistance = Math.max(0.6, Math.min(2.5, (video.videoWidth * 0.18) / avgWidth));
+
+    const vector = new THREE.Vector3(ndcX, ndcY, -1).normalize();
+    vector.applyQuaternion(camera.quaternion);
+
+    const worldPos = camera.position.clone().add(vector.multiplyScalar(estimatedDistance));
+    return worldPos;
+}
+
+// Escáner continuo
+function scanQR() {
+    if (hasSpawned || !model || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+
+    scanCanvas.width = video.videoWidth;
+    scanCanvas.height = video.videoHeight;
+    scanCtx.drawImage(video, 0, 0, scanCanvas.width, scanCanvas.height);
+
+    const imageData = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+    if (code) {
+        // Posicionar al perrete directamente encima del punto físico del QR
+        const spawnPosition = calculateQRWorldPosition(code.location);
+
+        model.position.copy(spawnPosition);
+        model.lookAt(camera.position.x, model.position.y, camera.position.z);
+
+        scene.add(model);
+        hasSpawned = true;
+
+        statusText.innerText = "¡Perro anclado sobre tu currículum!";
+        setTimeout(() => {
+            document.getElementById("status-bar").style.display = "none";
+        }, 3000);
+    }
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    const delta = clock.getDelta();
+    if (mixer) mixer.update(delta);
+    if (controls) controls.update();
+
+    if (!hasSpawned) {
+        scanQR();
     }
 
-    function scanQR() {
-        if (hasSpawned) return;
+    renderer.render(scene, camera);
+}
 
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
-            scanCanvas.width = video.videoWidth;
-            scanCanvas.height = video.videoHeight;
-            scanCtx.drawImage(video, 0, 0, scanCanvas.width, scanCanvas.height);
+window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
 
-            const imageData = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
-            const code = jsQR(imageData.data, imageData.width, imageData.height);
-
-            if (code) {
-                hasSpawned = true;
-                statusBar.innerText = "¡QR Detectado! Revisa la animación en 3D:";
-
-                const stream = video.srcObject;
-                if (stream) {
-                    stream.getTracks().forEach(track => track.stop());
-                }
-                video.style.display = "none";
-
-                dogViewer.style.display = "block";
-                
-                if (dogViewer.availableAnimations.length > 0) {
-                    dogViewer.animationName = dogViewer.availableAnimations[0];
-                    dogViewer.play();
-                }
-
-                return;
-            }
-        }
-
-        requestAnimationFrame(scanQR);
-    }
-
-    startCamera();
+startCamera();
+animate();
 </script>
 
 </body>
