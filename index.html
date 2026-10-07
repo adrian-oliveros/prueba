@@ -2,10 +2,10 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>CV AR Portfolio</title>
 
-    <!-- Librería unificada oficial WebAR (A-Frame + MindAR) -->
+    <!-- Motor A-Frame y MindAR unificados -->
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
@@ -24,13 +24,23 @@
             font-family: system-ui, -apple-system, sans-serif;
         }
 
+        /* Fuerza al canvas de la cámara a mostrarse siempre visible */
+        canvas, video {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            object-fit: cover !important;
+        }
+
         /* Banner informativo flotante */
         #status-bar {
             position: fixed;
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 9999;
+            z-index: 99999;
             background: rgba(15, 23, 42, 0.9);
             color: #ffffff;
             padding: 12px 24px;
@@ -46,31 +56,13 @@
             pointer-events: none;
         }
 
-        /* Botón de respaldo para forzar permisos de la cámara */
-        #permission-btn {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 10000;
-            background: #2563eb;
-            color: #ffffff;
-            border: none;
-            padding: 16px 32px;
-            border-radius: 30px;
-            font-size: 16px;
-            font-weight: bold;
-            box-shadow: 0 10px 30px rgba(37, 99, 235, 0.5);
-            display: none;
-        }
-
         /* Botones flotantes inferiores */
         #video-selector {
             position: fixed;
             bottom: 30px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 9999;
+            z-index: 99999;
             display: flex;
             gap: 10px;
             background: rgba(15, 23, 42, 0.85);
@@ -93,6 +85,10 @@
             cursor: pointer;
             white-space: nowrap;
         }
+
+        .video-btn:active {
+            background: #2563eb;
+        }
     </style>
 </head>
 
@@ -100,17 +96,13 @@
 
     <div id="status-bar">Apunta la cámara al marcador de tu CV...</div>
 
-    <button id="permission-btn" onclick="solicitarPermisoCamaraDirecto()">
-        📷 Abrir Cámara
-    </button>
-
     <div id="video-selector">
         <button class="video-btn" onclick="openLink('https://www.youtube.com')">🎬 Proyecto 1</button>
         <button class="video-btn" onclick="openLink('https://www.youtube.com')">🚀 Showreel</button>
         <button class="video-btn" onclick="openLink('https://www.linkedin.com')">💼 LinkedIn</button>
     </div>
 
-    <!-- Escena AR Configurada para resolución y aspecto simétrico -->
+    <!-- Escena AR -->
     <a-scene 
         mindar-image="imageTargetSrc: ./qr.mind; autoStart: true; uiLoading: no; uiScanning: no;" 
         color-space="sRGB" 
@@ -129,8 +121,7 @@
                 src="#dogModel" 
                 position="0 0 0" 
                 scale="0.3 0.3 0.3" 
-                rotation="90 0 0"
-                animation-mixer>
+                rotation="90 0 0">
             </a-gltf-model>
         </a-entity>
 
@@ -138,38 +129,30 @@
 
     <script>
         const statusBar = document.getElementById("status-bar");
-        const permissionBtn = document.getElementById("permission-btn");
         const videoSelector = document.getElementById("video-selector");
 
-        // Detección de permisos de cámara
-        async function comprobarCamara() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                // Permiso concedido, cerrar stream de prueba
-                stream.getTracks().forEach(track => track.stop());
-            } catch (err) {
-                // Si el navegador bloquea el cartel automático, mostrar botón azul
-                statusBar.innerText = "Se requiere permiso para usar la cámara.";
-                permissionBtn.style.display = "block";
+        // Script para desbloquear la reproducción de vídeo de la cámara en Safari/Chrome móvil
+        function forzarVideoCamara() {
+            const video = document.querySelector('video');
+            if (video) {
+                video.setAttribute('playsinline', '');
+                video.setAttribute('webkit-playsinline', '');
+                video.muted = true;
+                video.play().catch(() => {});
+            } else {
+                setTimeout(forzarVideoCamara, 200);
             }
         }
 
-        async function solicitarPermisoCamaraDirecto() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                stream.getTracks().forEach(track => track.stop());
-                location.reload(); // Recargar la página ya con el permiso guardado
-            } catch (err) {
-                alert("Debes permitir el acceso a la cámara en los ajustes de tu navegador.");
-            }
-        }
-
-        // Eventos de detección del objetivo
         document.addEventListener("DOMContentLoaded", () => {
-            comprobarCamara();
+            forzarVideoCamara();
 
             const sceneEl = document.querySelector('a-scene');
-            
+
+            sceneEl.addEventListener("arReady", () => {
+                statusBar.innerText = "Cámara lista. Apunta al marcador...";
+            });
+
             sceneEl.addEventListener("targetFound", () => {
                 statusBar.innerText = "¡Marcador detectado!";
                 videoSelector.style.display = "flex";
