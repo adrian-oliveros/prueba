@@ -21,9 +21,9 @@ renderer.setPixelRatio(window.devicePixelRatio);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 0, 5);
+camera.position.set(0, 0, 0); // La cámara es el origen inicial (0,0,0)
 
-// Iluminación para que el modelo se vea perfecto
+// Iluminación
 const ambientLight = new THREE.AmbientLight(0xffffff, 2.5);
 scene.add(ambientLight);
 
@@ -36,14 +36,14 @@ let mixer = null;
 let hasSpawned = false;
 const clock = new THREE.Clock();
 
-// Cargar el perrete
+// Cargar el modelo 3D
 log("Cargando modelo 3D...");
 const loader = new GLTFLoader();
 loader.load(
     "./model.glb",
     (gltf) => {
         model = gltf.scene;
-        model.scale.set(0.5, 0.5, 0.5);
+        model.scale.set(0.3, 0.3, 0.3);
 
         if (gltf.animations && gltf.animations.length > 0) {
             mixer = new THREE.AnimationMixer(model);
@@ -53,13 +53,13 @@ loader.load(
             log("Animaciones listas.");
         }
 
-        log("Modelo cargado. Enfoca cualquier QR...");
+        log("Modelo listo. Escaneando QR...");
     },
     undefined,
     (err) => log("Error cargando modelo: " + err.message)
 );
 
-// Iniciar cámara web estándar directamente (sin librerías que inyecten botones)
+// Iniciar cámara web
 async function startCamera() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -67,10 +67,39 @@ async function startCamera() {
         });
         video.srcObject = stream;
         await video.play();
-        log("Cámara activa. Escaneando fotogramas...");
+        log("Cámara activa. Enfoca el QR...");
     } catch (err) {
-        log("Error al acceder a la cámara: " + err.message);
+        log("Error de cámara: " + err.message);
     }
+}
+
+// Convertir las coordenadas 2D del QR en la pantalla a un punto 3D en el mundo real
+function calculateQRWorldPosition(location) {
+    // 1. Obtener el centro del QR en píxeles (x, y)
+    const centerX = (location.topLeftCorner.x + location.topRightCorner.x + location.bottomRightCorner.x + location.bottomLeftCorner.x) / 4;
+    const centerY = (location.topLeftCorner.y + location.topRightCorner.y + location.bottomRightCorner.y + location.bottomLeftCorner.y) / 4;
+
+    // 2. Convertir coordenadas a Normalized Device Coordinates (NDC) [-1 a +1]
+    const ndcX = (centerX / video.videoWidth) * 2 - 1;
+    const ndcY = -(centerY / video.videoHeight) * 2 + 1;
+
+    // 3. Estimar la distancia (Z) según el tamaño del QR en pantalla
+    const side1 = Math.hypot(location.topRightCorner.x - location.topLeftCorner.x, location.topRightCorner.y - location.topLeftCorner.y);
+    const side2 = Math.hypot(location.bottomRightCorner.x - location.bottomLeftCorner.x, location.bottomRightCorner.y - location.bottomLeftCorner.y);
+    const avgWidth = (side1 + side2) / 2;
+
+    // Supeditamos la distancia focal aproximada (factor empírico constante para cámaras de móvil)
+    const estimatedDistance = Math.max(0.8, Math.min(3.5, (video.videoWidth * 0.18) / avgWidth));
+
+    // 4. Proyectar el rayo desde la cámara
+    const vector = new THREE.Vector3(ndcX, ndcY, 0.5);
+    vector.unproject(camera);
+    vector.sub(camera.position).normalize();
+
+    // 5. Calcular la posición 3D final multiplicando por la distancia estimada
+    const worldPos = camera.position.clone().add(vector.multiplyScalar(estimatedDistance));
+
+    return worldPos;
 }
 
 // Escáner continuo de QR
@@ -85,26 +114,35 @@ function scanQR() {
     const code = jsQR(imageData.data, imageData.width, imageData.height);
 
     if (code) {
-        log("¡QR Detectado! Haciendo nacer al perro...");
+        log("¡QR Detectado! Calculando posición espacial...");
 
-        // Colocar al perro frente a la cámara en el centro de la escena 3D
-        model.position.set(0, -0.5, -2);
-        model.rotation.y = 0;
+        // Obtener las coordenadas tridimensionales
+        const spawnPosition = calculateQRWorldPosition(code.location);
+
+        // Posicionar el perro en las coordenadas exactas calculadas
+        model.position.copy(spawnPosition);
+
+        // Hacer que el perro mire hacia la cámara en el momento del nacimiento
+        model.lookAt(camera.position.x, model.position.y, camera.position.z);
+
         scene.add(model);
-
         hasSpawned = true;
-        log("¡El perro ha nacido y permanecerá aquí siempre!");
+
+        log("¡Perro fijado en el espacio físico!");
+        setTimeout(() => {
+            const debugLog = document.getElementById("debug-log");
+            if (debugLog) debugLog.style.display = "none";
+        }, 3000);
     }
 }
 
-// Bucle principal de renderizado
+// Bucle de renderizado
 function animate() {
     requestAnimationFrame(animate);
 
     const delta = clock.getDelta();
     if (mixer) mixer.update(delta);
 
-    // Si aún no ha nacido, seguimos escaneando la cámara
     if (!hasSpawned) {
         scanQR();
     }
@@ -112,13 +150,11 @@ function animate() {
     renderer.render(scene, camera);
 }
 
-// Ajuste al redimensionar pantalla
 window.addEventListener("resize", () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// Arrancar proceso
 startCamera();
 animate();
