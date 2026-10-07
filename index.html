@@ -5,13 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>CV AR Portfolio</title>
 
-    <!-- Three.js (Motor 3D puro) -->
+    <!-- Motor 3D y Detector de Imágenes -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
-    <!-- Loader de modelos GLTF/GLB -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-
-    <!-- MindAR Motor de Rastreo Automático -->
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
 
     <style>
@@ -26,7 +22,7 @@
             height: 100vh;
             overflow: hidden;
             background-color: #000000;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: system-ui, -apple-system, sans-serif;
         }
 
         #ar-container {
@@ -37,7 +33,7 @@
             left: 0;
         }
 
-        /* Indicador Superior */
+        /* Banner informativo en la parte superior */
         #status-bar {
             position: fixed;
             top: 20px;
@@ -51,14 +47,35 @@
             font-size: 14px;
             font-weight: 500;
             text-align: center;
-            border: 1px solid rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.2);
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
             backdrop-filter: blur(8px);
+            width: 85%;
+            max-width: 400px;
             pointer-events: none;
             transition: opacity 0.3s ease;
         }
 
-        /* Selector Flotante de Vídeos / Portfolio */
+        /* Botón gigante de inicio por si el navegador bloquea la cámara automática */
+        #start-button {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10000;
+            background: #2563eb;
+            color: #ffffff;
+            border: none;
+            padding: 16px 32px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(37, 99, 235, 0.5);
+            display: none;
+        }
+
+        /* Selector de vídeos en la parte inferior */
         #video-selector {
             position: fixed;
             bottom: 30px;
@@ -66,7 +83,7 @@
             transform: translateX(-50%);
             z-index: 9999;
             display: flex;
-            gap: 12px;
+            gap: 10px;
             background: rgba(15, 23, 42, 0.85);
             padding: 12px 18px;
             border-radius: 24px;
@@ -84,116 +101,78 @@
         }
 
         .video-btn {
-            background: rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.1);
             color: #ffffff;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            padding: 10px 16px;
-            border-radius: 16px;
-            font-size: 13px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 10px 14px;
+            border-radius: 14px;
+            font-size: 12px;
             font-weight: 600;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
             white-space: nowrap;
-            transition: all 0.2s ease;
         }
 
         .video-btn:active {
             background: #2563eb;
-            transform: scale(0.95);
         }
     </style>
 </head>
 
 <body>
 
-    <div id="status-bar">Apunta la cámara al marcador de tu CV...</div>
+    <div id="status-bar">Iniciando cámara...</div>
+    <button id="start-button">📷 Activar Cámara</button>
 
     <div id="video-selector">
-        <button class="video-btn" onclick="openVideo('https://www.youtube.com')">🎬 Proyecto 1</button>
-        <button class="video-btn" onclick="openVideo('https://www.youtube.com')">🚀 Showreel</button>
-        <button class="video-btn" onclick="openVideo('https://www.linkedin.com')">💼 LinkedIn</button>
+        <button class="video-btn" onclick="openLink('https://www.youtube.com')">🎬 Proyecto 1</button>
+        <button class="video-btn" onclick="openLink('https://www.youtube.com')">🚀 Showreel</button>
+        <button class="video-btn" onclick="openLink('https://www.linkedin.com')">💼 LinkedIn</button>
     </div>
 
     <div id="ar-container"></div>
 
     <script>
-        document.addEventListener("DOMContentLoaded", async () => {
-            const statusBar = document.getElementById("status-bar");
-            const videoSelector = document.getElementById("video-selector");
+        const statusBar = document.getElementById("status-bar");
+        const startBtn = document.getElementById("start-button");
+        const videoSelector = document.getElementById("video-selector");
 
-            // Inicialización directa de la cámara
-            const mindarThree = new window.MINDAR.IMAGE.MindARThree({
-                container: document.querySelector("#ar-container"),
-                imageTargetSrc: "./qr.mind",
-                uiLoading: "no",
-                uiScanning: "no"
-            });
-
-            const { renderer, scene, camera } = mindarThree;
-
-            // Iluminación para mantener las proporciones y colores reales
-            const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
-            scene.add(ambientLight);
-
-            const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-            dirLight.position.set(0, 10, 10);
-            scene.add(dirLight);
-
-            const anchor = mindarThree.addAnchor(0);
-
-            let mixer;
-            const loader = new THREE.GLTFLoader();
-
-            // Cargar el modelo del perro
-            loader.load("./model.glb", (gltf) => {
-                const model = gltf.scene;
-
-                // Mantiene la escala simétrica 1:1 sin deformar al perro
-                model.scale.set(0.25, 0.25, 0.25);
-                model.rotation.x = Math.PI / 2;
-
-                anchor.group.add(model);
-
-                // Animación automática del modelo
-                if (gltf.animations && gltf.animations.length > 0) {
-                    mixer = new THREE.AnimationMixer(model);
-                    const action = mixer.clipAction(gltf.animations[0]);
-                    action.play();
-                }
-            });
-
-            // Al enfocar el papel
-            anchor.onTargetFound = () => {
-                statusBar.innerText = "¡Marcador Detectado!";
-                videoSelector.classList.add("active");
-                setTimeout(() => {
-                    statusBar.style.opacity = "0";
-                }, 1500);
-            };
-
-            // Al perder de vista el papel
-            anchor.onTargetLost = () => {
-                statusBar.style.opacity = "1";
-                statusBar.innerText = "Apunta la cámara al marcador de tu CV...";
-            };
-
-            // Arrancar la cámara sin interacción previa
-            await mindarThree.start();
-
-            const clock = new THREE.Clock();
-            renderer.setAnimationLoop(() => {
-                const delta = clock.getDelta();
-                if (mixer) mixer.update(delta);
-                renderer.render(scene, camera);
-            });
-        });
-
-        function openVideo(url) {
-            window.open(url, "_blank");
+        // 1. Fuerza al navegador a pedir permiso para usar la cámara
+        async function solicitarCamara() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                stream.getTracks().forEach(track => track.stop()); // Cierra la prueba inicial
+                return true;
+            } catch (err) {
+                statusBar.innerText = "Toca el botón azul para permitir la cámara.";
+                startBtn.style.display = "block";
+                return false;
+            }
         }
-    </script>
 
-</body>
-</html>
+        async function arrancarAR() {
+            startBtn.style.display = "none";
+            statusBar.innerText = "Cargando motor de Realidad Aumentada...";
+
+            try {
+                const mindarThree = new window.MINDAR.IMAGE.MindARThree({
+                    container: document.querySelector("#ar-container"),
+                    imageTargetSrc: "./qr.mind",
+                    uiLoading: "no",
+                    uiScanning: "no"
+                });
+
+                const { renderer, scene, camera } = mindarThree;
+
+                // Luces para el modelo 3D
+                scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+                const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+                dirLight.position.set(0, 10, 10);
+                scene.add(dirLight);
+
+                const anchor = mindarThree.addAnchor(0);
+
+                let mixer;
+                const loader = new THREE.GLTFLoader();
+
+                // Carga del perrete 3D
+                loader.load("./model.glb", (gltf)
