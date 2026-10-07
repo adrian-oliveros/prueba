@@ -4,7 +4,6 @@ import { MindARThree } from "mindar-image-three";
 
 const container = document.querySelector("#ar-container");
 
-// Inicializar MindAR
 const mindarThree = new MindARThree({
     container: container,
     imageTargetSrc: "./qr.mind",
@@ -16,22 +15,25 @@ const mindarThree = new MindARThree({
 
 const { renderer, scene, camera } = mindarThree;
 
-// Iluminación reforzada (luz ambiental + direccional)
-const ambientLight = new THREE.AmbientLight(0xffffff, 2.0);
+// Iluminación
+const ambientLight = new THREE.AmbientLight(0xffffff, 2.5);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 2.5);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
 directionalLight.position.set(1, 4, 3);
 scene.add(directionalLight);
 
-// Anchor tracking del objetivo
+// Anchor tracking del objetivo (índice 0)
 const anchor = mindarThree.addAnchor(0);
+
+// Forzar que el grupo del anchor NUNCA se oculte automáticamente por MindAR
+anchor.group.visible = true;
 
 // Carga de modelo y animaciones
 const loader = new GLTFLoader();
 let model = null;
 let mixer = null;
-let hasSpawned = false; // Control de primera aparición
+let hasSpawned = false;
 
 const clock = new THREE.Clock();
 
@@ -40,10 +42,14 @@ loader.load(
     (gltf) => {
         model = gltf.scene;
 
-        // Escala del modelo
+        // Ajustar escala y posición local dentro del anchor
         model.scale.set(0.3, 0.3, 0.3);
+        model.position.set(0, 0, 0);
 
-        // Inicializar animaciones de GLTF
+        // Ocultar el modelo inicialmente hasta que se detecte el QR por primera vez
+        model.visible = false;
+
+        // Animaciones
         if (gltf.animations && gltf.animations.length > 0) {
             mixer = new THREE.AnimationMixer(model);
             gltf.animations.forEach((clip) => {
@@ -52,57 +58,45 @@ loader.load(
             });
         }
 
-        // Se vincula inicialmente al anchor para que MindAR lo gestione durante el escaneo
+        // Añadir el perro dentro del grupo del anchor
         anchor.group.add(model);
-        console.log("Modelo .glb cargado en memoria correctamente.");
+        console.log("Modelo .glb cargado correctamente.");
     },
     undefined,
     (error) => {
-        console.error("Error al cargar el archivo model.glb:", error);
+        console.error("Error al cargar model.glb:", error);
     }
 );
 
-// Evento: Al detectar el objetivo QR
+// Evento: Al detectar el QR por primera vez
 anchor.onTargetFound = () => {
-    if (!model || hasSpawned) return;
+    if (!model) return;
 
-    // Retardamos la extracción 2 frames para dar tiempo a que MindAR actualice la pose de la cámara y del anchor
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            // Forzar la actualización explícita de las matrices del mundo
-            scene.updateMatrixWorld(true);
-            anchor.group.updateMatrixWorld(true);
-
-            const worldPosition = new THREE.Vector3();
-            const worldQuaternion = new THREE.Quaternion();
-            const worldScale = new THREE.Vector3();
-
-            // Extraer transformación del anchor
-            anchor.group.matrixWorld.decompose(worldPosition, worldQuaternion, worldScale);
-
-            // Trasladar el perro a la escena global para independizarlo del QR
-            scene.add(model);
-
-            // Asignar posición y rotación globales retenidas
-            model.position.copy(worldPosition);
-            model.quaternion.copy(worldQuaternion);
-            
-            // Forzar visibilidad activa
-            model.visible = true;
-
-            hasSpawned = true;
-            console.log("¡Perrete instanciado con éxito en el espacio mundo!", model.position);
-        });
-    });
+    if (!hasSpawned) {
+        hasSpawned = true;
+        model.visible = true;
+        console.log("¡El perro ha aparecido en el QR!");
+    }
 };
 
+// Sobrescribir el evento targetLost de MindAR para que NADA se oculte
 anchor.onTargetLost = () => {
-    // El perrete permanece en 'scene', no se elimina ni se oculta al perder el QR
+    if (model && hasSpawned) {
+        // Aseguramos que el grupo y el modelo sigan siendo visibles
+        anchor.group.visible = true;
+        model.visible = true;
+    }
 };
 
-// Bucle de renderizado
+// Bucle de renderizado global
 renderer.setAnimationLoop(() => {
     const delta = clock.getDelta();
+
+    // Mantener la visibilidad activa de forma continua una vez aparecido
+    if (hasSpawned && model) {
+        anchor.group.visible = true;
+        model.visible = true;
+    }
 
     if (mixer) {
         mixer.update(delta);
@@ -111,5 +105,5 @@ renderer.setAnimationLoop(() => {
     renderer.render(scene, camera);
 });
 
-// Iniciar sesión AR
+// Iniciar AR
 await mindarThree.start();
