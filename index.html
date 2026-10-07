@@ -17,11 +17,31 @@
         }
 
         #ar-container {
-            width: 100%;
-            height: 100%;
-            position: absolute;
+            width: 100vw;
+            height: 100vh;
+            position: fixed;
             top: 0;
             left: 0;
+            z-index: 1;
+        }
+
+        /* Estilos obligatorios para evitar la pantalla negra de MindAR */
+        #ar-container video {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover !important;
+        }
+
+        #ar-container canvas {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            z-index: 2;
         }
 
         #status-bar {
@@ -102,6 +122,9 @@ const mindarThree = new MindARThree({
 
 const { renderer, scene, camera } = mindarThree;
 
+// Asegurar fondo transparente en WebGL para que el vídeo de la cámara no quede tapado
+renderer.setClearColor(0x000000, 0);
+
 // Iluminación
 const ambientLight = new THREE.AmbientLight(0xffffff, 2.5);
 scene.add(ambientLight);
@@ -153,13 +176,22 @@ renderer.setAnimationLoop(() => {
     renderer.render(scene, camera);
 });
 
-// Función de arranque al hacer clic
+// Inicialización de la cámara
 startBtn.addEventListener("click", async () => {
     statusText.innerText = "Iniciando cámara...";
     startBtn.style.display = "none";
 
     try {
         await mindarThree.start();
+        
+        // Forzar ajuste del vídeo inyectado por MindAR
+        const video = container.querySelector("video");
+        if (video) {
+            video.setAttribute("playsinline", "");
+            video.setAttribute("muted", "");
+            await video.play();
+        }
+
         statusText.innerText = "Apunta la cámara al QR de mi currículum...";
     } catch (err) {
         statusText.innerText = "Error de cámara: " + err.message;
