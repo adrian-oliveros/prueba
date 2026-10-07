@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Portfolio CV - AR Experience</title>
 
-    <!-- Motor 3D A-Frame -->
+    <!-- Motor A-Frame v1.4.2 -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     
-    <!-- Motor AR.js para Tracking de Marcador/QR -->
+    <!-- AR.js para A-Frame (Lectura de archivos .patt) -->
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     
-    <!-- Animaciones GLTF -->
+    <!-- Animaciones GLTF para el perrete -->
     <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.0.0/dist/aframe-extras.min.js"></script>
 
     <style>
@@ -22,15 +22,16 @@
             height: 100%;
             overflow: hidden;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #000;
         }
 
-        /* Status Bar Superior */
+        /* Indicador Superior */
         #status-bar {
             position: fixed;
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 9999;
+            z-index: 99999;
             background: rgba(15, 23, 42, 0.9);
             color: #ffffff;
             padding: 12px 24px;
@@ -42,15 +43,16 @@
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
             backdrop-filter: blur(8px);
             pointer-events: none;
+            transition: opacity 0.5s ease;
         }
 
-        /* Selector de Vídeos / Proyectos (FASE 2) */
+        /* Selector Flotante de Vídeos / Portfolio */
         #video-selector {
             position: fixed;
             bottom: 30px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 9999;
+            z-index: 99999;
             display: flex;
             gap: 12px;
             background: rgba(15, 23, 42, 0.85);
@@ -94,14 +96,14 @@
 
 <body>
 
-<div id="status-bar">Apunta la cámara al QR de mi currículum...</div>
+<div id="status-bar">Apunta la cámara al marcador de mi currículum...</div>
 
-<!-- Selector Flotante de Vídeos / Portfolio -->
+<!-- Selector de Vídeos / Enlaces -->
 <div id="video-selector">
-    <button class="video-btn" onclick="openVideo('https://www.youtube.com/watch?v=dQw4w9WgXcQ')">
+    <button class="video-btn" onclick="openVideo('https://www.youtube.com')">
         🎬 Proyecto 1
     </button>
-    <button class="video-btn" onclick="openVideo('https://www.youtube.com/watch?v=dQw4w9WgXcQ')">
+    <button class="video-btn" onclick="openVideo('https://www.youtube.com')">
         🚀 Showreel
     </button>
     <button class="video-btn" onclick="openVideo('https://www.linkedin.com')">
@@ -109,20 +111,20 @@
     </button>
 </div>
 
-<!-- Escena AR Estilo Business Card -->
+<!-- Escena AR.js escuchando tu archivo marker.patt -->
 <a-scene 
     embedded 
-    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix;"
     vr-mode-ui="enabled: false">
 
     <a-assets>
         <a-asset-item id="dogModel" src="./model.glb"></a-asset-item>
     </a-assets>
 
-    <!-- Marcador genérico o QR -->
-    <a-marker preset="hire" id="qr-marker">
+    <!-- Vincular aquí tu archivo .patt descargado -->
+    <a-marker type="pattern" url="./marker.patt" id="patt-marker">
         
-        <!-- Modelo 3D en el centro -->
+        <!-- Perro 3D animado encima de la imagen -->
         <a-gltf-model 
             src="#dogModel" 
             position="0 0 0" 
@@ -139,24 +141,23 @@
 <script>
     const statusBar = document.getElementById("status-bar");
     const videoSelector = document.getElementById("video-selector");
-    const marker = document.getElementById("qr-marker");
+    const marker = document.getElementById("patt-marker");
 
-    let detectedOnce = false;
-
-    // Cuando detecta el QR impreso
+    // Cuando la cámara detecte la imagen del .patt
     marker.addEventListener("markerFound", () => {
-        statusBar.innerText = "¡Portfolio Activado!";
-        videoSelector.classList.add("active");
+        statusBar.innerText = "¡Marcador Detectado!";
+        videoSelector.classList.add("active"); // Despliega la barra de vídeos
 
-        if (!detectedOnce) {
-            detectedOnce = true;
-            setTimeout(() => {
-                statusBar.style.opacity = "0";
-            }, 2000);
-        }
+        setTimeout(() => {
+            statusBar.style.opacity = "0";
+        }, 1500);
     });
 
-    // Función para abrir los vídeos de YouTube al pulsar los botones
+    marker.addEventListener("markerLost", () => {
+        statusBar.style.opacity = "1";
+        statusBar.innerText = "Apunta la cámara al marcador de mi currículum...";
+    });
+
     function openVideo(url) {
         window.open(url, "_blank");
     }
