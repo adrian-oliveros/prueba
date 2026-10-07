@@ -5,14 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>CV AR Portfolio</title>
 
-    <!-- 1. A-Frame (Motor 3D de Mozilla) -->
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <!-- A-Frame v1.4.2 (Versión Oficial Recomendada por MindAR) -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     
-    <!-- 2. MindAR para A-Frame -->
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <!-- MindAR v1.2.2 (Build Estable de GitHub) -->
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image-aframe.prod.js"></script>
 
-    <!-- 3. Librería para animación automática en A-Frame -->
-    <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v7.2.0/dist/aframe-extras.min.js"></script>
+    <!-- Plugin Oficial de Animaciones GLTF para A-Frame -->
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.0.0/dist/aframe-extras.min.js"></script>
 
     <style>
         html, body {
@@ -23,12 +23,18 @@
             overflow: hidden;
         }
 
-        #status-bar {
+        /* Ocultar interfaz por defecto de A-Frame/VR */
+        .a-enter-vr-button {
+            display: none !important;
+        }
+
+        /* Banner indicador en la parte superior */
+        #status-info {
             position: fixed;
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 9999;
+            z-index: 99999;
             background: rgba(15, 23, 42, 0.9);
             color: #ffffff;
             padding: 12px 24px;
@@ -46,63 +52,64 @@
 
 <body>
 
-<div id="status-bar">Apunta la cámara al QR de mi currículum...</div>
+<div id="status-info">Apunta la cámara al QR de mi currículum...</div>
 
+<!-- Escena Oficial MindAR -->
 <a-scene 
     mindar-image="imageTargetSrc: ./qr.mind; autoStart: true; uiLoading: no; uiError: no; uiScanning: no;" 
     color-space="sRGB" 
     embedded 
-    renderer="colorManagement: true, physicallyCorrectLights" 
+    renderer="colorManagement: true, physicallyCorrectLights: true" 
     vr-mode-ui="enabled: false" 
     device-orientation-permission-ui="enabled: false">
 
     <a-assets>
+        <!-- Carga de tu archivo 3D -->
         <a-asset-item id="dogModel" src="./model.glb"></a-asset-item>
     </a-assets>
 
     <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-    <!-- Objeto anclado al QR -->
+    <!-- Objetivo del rastreador vinculado a tu qr.mind (Índice 0) -->
     <a-entity mindar-image-target="targetIndex: 0" id="qr-target">
         
         <!-- 
-          Ajustes clave:
-          - position="0 0 0": Si flota o se entierra, cambia el segundo número (ej: "0 -0.2 0" o "0 0.1 0")
-          - rotation="90 0 0": Pone al perro de pie sobre el papel horizontal
+          Configuración del modelo 3D:
+          - rotation="0 0 0": Coloca al perro mirando de frente al papel.
+          - position="0 0 0": Centrado sobre el QR.
+          - scale="0.3 0.3 0.3": Ajuste proporcional.
         -->
         <a-gltf-model 
-            id="dog-entity"
+            id="dog-model"
             src="#dogModel" 
             position="0 0 0" 
-            rotation="90 0 0" 
+            rotation="0 0 0" 
             scale="0.3 0.3 0.3"
-            animation-mixer>
+            animation-mixer="clip: *; loop: repeat;">
         </a-gltf-model>
 
     </a-entity>
 </a-scene>
 
 <script>
-    const statusBar = document.getElementById("status-bar");
-    const qrTarget = document.getElementById("qr-target");
-    const dogEntity = document.getElementById("dog-entity");
+    document.addEventListener("DOMContentLoaded", () => {
+        const statusInfo = document.getElementById("status-info");
+        const qrTarget = document.getElementById("qr-target");
 
-    let isDogVisible = false;
+        // Evento: Cuando la cámara detecta el QR impreso/en pantalla
+        qrTarget.addEventListener("targetFound", () => {
+            statusInfo.innerText = "¡QR Detectado!";
+            setTimeout(() => {
+                statusInfo.style.opacity = "0";
+                statusInfo.style.transition = "opacity 0.5s ease";
+            }, 1500);
+        });
 
-    qrTarget.addEventListener("targetFound", () => {
-        isDogVisible = true;
-        statusBar.innerText = "¡QR Detectado!";
-        setTimeout(() => {
-            statusBar.style.display = "none";
-        }, 2000);
-    });
-
-    // Anulamos la ocultación cuando se pierde el encuadre
-    qrTarget.addEventListener("targetLost", () => {
-        if (isDogVisible) {
-            // Forzamos a que el modelo siga siendo visible en pantalla
-            dogEntity.setAttribute("visible", "true");
-        }
+        // Evento: Si la cámara pierde el QR
+        qrTarget.addEventListener("targetLost", () => {
+            statusInfo.style.opacity = "1";
+            statusInfo.innerText = "Apunta la cámara al QR de mi currículum...";
+        });
     });
 </script>
 
