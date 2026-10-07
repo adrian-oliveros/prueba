@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QR AR - Perrete Persistente</title>
+    <title>QR AR - Debug</title>
 
     <style>
         html, body {
@@ -18,9 +18,25 @@
             width: 100%;
             height: 100%;
         }
+
+        #debug-log {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            color: #00ff00;
+            font-family: monospace;
+            font-size: 12px;
+            padding: 10px;
+            border-radius: 8px;
+            z-index: 9999;
+            pointer-events: none;
+            max-height: 150px;
+            overflow-y: auto;
+        }
     </style>
 
-    <!-- Importmap con Three.js y MindAR -->
     <script type="importmap">
     {
         "imports": {
@@ -34,6 +50,7 @@
 
 <body>
 
+<div id="debug-log">Iniciando depuración...</div>
 <div id="ar-container"></div>
 
 <script type="module" src="./app.js"></script>
