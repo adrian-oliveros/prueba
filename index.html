@@ -2,8 +2,8 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>QR AR Persistente</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR AR Persistente Real</title>
 
     <style>
         html, body {
@@ -12,9 +12,11 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background: #000;
+            background-color: #000;
+            font-family: sans-serif;
         }
 
+        /* Cámara web para el lector de QR */
         #webcam {
             position: absolute;
             top: 0;
@@ -25,52 +27,125 @@
             z-index: 1;
         }
 
-        #canvas3d {
+        /* Banner indicador */
+        #status-bar {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 14px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        /* Contenedor de Model Viewer en AR Nativo */
+        model-viewer {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 2;
-            pointer-events: none;
-        }
-
-        #debug-log {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            right: 10px;
-            background: rgba(0,0,0,0.8);
-            color: #00ff00;
-            font-family: monospace;
-            font-size: 11px;
-            padding: 10px;
-            border-radius: 8px;
-            z-index: 10;
-            pointer-events: none;
-            max-height: 140px;
-            overflow-y: auto;
+            z-index: 5;
+            display: none; /* Oculto hasta detectar el QR */
         }
     </style>
 
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-        }
-    }
-    </script>
+    <!-- Componente oficial Google model-viewer -->
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+    <!-- Lector QR ultrafácil -->
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 </head>
 
 <body>
 
-<div id="debug-log">Iniciando cámara directa...</div>
-<video id="webcam" autoplay playsinline muted></video>
-<canvas id="canvas3d"></canvas>
+<div id="status-bar">Apunta con la cámara al código QR...</div>
 
-<script type="module" src="./app.js"></script>
+<video id="webcam" autoplay playsinline muted></video>
+
+<!-- Lector de AR Nativo con World Tracking de ARCore/ARKit -->
+<model-viewer 
+    id="dog-viewer"
+    src="./model.glb"
+    alt="Perrete 3D"
+    ar
+    ar-modes="webxr scene-viewer quick-look"
+    camera-controls
+    autoplay
+    shadow-intensity="1">
+</model-viewer>
+
+<script>
+    const video = document.getElementById("webcam");
+    const statusBar = document.getElementById("status-bar");
+    const dogViewer = document.getElementById("dog-viewer");
+
+    const scanCanvas = document.createElement("canvas");
+    const scanCtx = scanCanvas.getContext("2d");
+    let hasSpawned = false;
+
+    // 1. Iniciar la cámara para buscar el QR
+    async function startCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: "environment" }
+            });
+            video.srcObject = stream;
+            await video.play();
+            requestAnimationFrame(scanQR);
+        } catch (err) {
+            statusBar.innerText = "Error accediendo a la cámara: " + err.message;
+        }
+    }
+
+    // 2. Escanear fotogramas hasta encontrar el QR
+    function scanQR() {
+        if (hasSpawned) return;
+
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            scanCanvas.width = video.videoWidth;
+            scanCanvas.height = video.videoHeight;
+            scanCtx.drawImage(video, 0, 0, scanCanvas.width, scanCanvas.height);
+
+            const imageData = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+            if (code) {
+                hasSpawned = true;
+                statusBar.innerText = "¡QR Detectado! Abriendo perro en tu entorno...";
+
+                // Detener la cámara de fondo
+                const stream = video.srcObject;
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                }
+                video.style.display = "none";
+
+                // Mostrar el visor 3D e invocar el modo AR Nativo automáticamente
+                dogViewer.style.display = "block";
+                
+                setTimeout(() => {
+                    statusBar.style.display = "none";
+                    // Lanza automáticamente la experiencia AR con superficie real
+                    if (dogViewer.canActivateAR) {
+                        dogViewer.activateAR();
+                    }
+                }, 800);
+
+                return;
+            }
+        }
+
+        requestAnimationFrame(scanQR);
+    }
+
+    startCamera();
+</script>
 
 </body>
 </html>
