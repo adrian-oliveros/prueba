@@ -16,15 +16,15 @@ const mindarThree = new MindARThree({
 
 const { renderer, scene, camera } = mindarThree;
 
-// Iluminación
-const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
+// Iluminación reforzada (luz ambiental + direccional)
+const ambientLight = new THREE.AmbientLight(0xffffff, 2.0);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
-directionalLight.position.set(1, 2, 3);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 2.5);
+directionalLight.position.set(1, 4, 3);
 scene.add(directionalLight);
 
-// Anchor tracking del objetivo (índice 0)
+// Anchor tracking del objetivo
 const anchor = mindarThree.addAnchor(0);
 
 // Carga de modelo y animaciones
@@ -40,7 +40,7 @@ loader.load(
     (gltf) => {
         model = gltf.scene;
 
-        // Escala global del perro
+        // Escala del modelo
         model.scale.set(0.3, 0.3, 0.3);
 
         // Inicializar animaciones de GLTF
@@ -52,8 +52,9 @@ loader.load(
             });
         }
 
-        // Añadimos inicialmente el modelo al anchor de MindAR
+        // Se vincula inicialmente al anchor para que MindAR lo gestione durante el escaneo
         anchor.group.add(model);
+        console.log("Modelo .glb cargado en memoria correctamente.");
     },
     undefined,
     (error) => {
@@ -61,45 +62,48 @@ loader.load(
     }
 );
 
-// Evento: Al detectar el objetivo QR por primera vez
+// Evento: Al detectar el objetivo QR
 anchor.onTargetFound = () => {
-    if (!model) return;
+    if (!model || hasSpawned) return;
 
-    // Si aún no ha "nacido", fijamos su posición en el mundo
-    if (!hasSpawned) {
-        // Esperamos al siguiente frame para asegurarnos de que la pose del tracking está actualizada
+    // Retardamos la extracción 2 frames para dar tiempo a que MindAR actualice la pose de la cámara y del anchor
+    requestAnimationFrame(() => {
         requestAnimationFrame(() => {
+            // Forzar la actualización explícita de las matrices del mundo
+            scene.updateMatrixWorld(true);
+            anchor.group.updateMatrixWorld(true);
+
             const worldPosition = new THREE.Vector3();
             const worldQuaternion = new THREE.Quaternion();
             const worldScale = new THREE.Vector3();
 
-            // Extraer la posición, rotación y escala globales del anchor en el instante de detección
+            // Extraer transformación del anchor
             anchor.group.matrixWorld.decompose(worldPosition, worldQuaternion, worldScale);
 
-            // Desvincular el modelo del anchor y pasarlo a la escena global
+            // Trasladar el perro a la escena global para independizarlo del QR
             scene.add(model);
 
-            // Asignar las coordenadas globales retenidas
+            // Asignar posición y rotación globales retenidas
             model.position.copy(worldPosition);
             model.quaternion.copy(worldQuaternion);
+            
+            // Forzar visibilidad activa
+            model.visible = true;
 
             hasSpawned = true;
-            console.log("¡El perrete ha nacido en las coordenadas del QR!");
+            console.log("¡Perrete instanciado con éxito en el espacio mundo!", model.position);
         });
-    }
+    });
 };
 
-// Evento: Al perder de vista el objetivo QR
 anchor.onTargetLost = () => {
-    // No eliminamos ni ocultamos el objeto. Al estar colgado directamente de 'scene',
-    // seguirá existiendo en el espacio 3D y reproduciendo su animación independientemente de la cámara.
+    // El perrete permanece en 'scene', no se elimina ni se oculta al perder el QR
 };
 
-// Bucle de renderizado global
+// Bucle de renderizado
 renderer.setAnimationLoop(() => {
     const delta = clock.getDelta();
 
-    // Actualizar animación del perrete
     if (mixer) {
         mixer.update(delta);
     }
