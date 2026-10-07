@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { MindARThree } from "mindar-image-three";
 
 const logEl = document.getElementById("debug-log");
 function log(msg) {
@@ -8,113 +7,118 @@ function log(msg) {
     if (logEl) logEl.innerHTML += "<br>> " + msg;
 }
 
-const container = document.querySelector("#ar-container");
+const video = document.getElementById("webcam");
+const canvas3d = document.getElementById("canvas3d");
 
-const mindarThree = new MindARThree({
-    container: container,
-    imageTargetSrc: "./qr.mind",
-    maxTrack: 1,
-    uiLoading: "yes",
-    uiScanning: "yes",
-    uiError: "yes"
-});
+// Canvas auxiliar en memoria para analizar los frames del QR
+const scanCanvas = document.createElement("canvas");
+const scanCtx = scanCanvas.getContext("2d");
 
-const { renderer, scene, camera } = mindarThree;
+// Configuración de Three.js
+const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, alpha: true, antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
 
-// Iluminación intensa
-const ambientLight = new THREE.AmbientLight(0xffffff, 3.0);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 0, 5);
+
+// Iluminación para que el modelo se vea perfecto
+const ambientLight = new THREE.AmbientLight(0xffffff, 2.5);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 3.0);
-directionalLight.position.set(0, 10, 10);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
+directionalLight.position.set(2, 5, 5);
 scene.add(directionalLight);
 
-// Anchor del QR
-const anchor = mindarThree.addAnchor(0);
-
-// CUBO DE PRUEBA (Para descartar si el QR rastrea)
-const debugGeo = new THREE.SphereGeometry(0.2, 16, 16);
-const debugMat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
-const debugMesh = new THREE.Mesh(debugGeo, debugMat);
-anchor.group.add(debugMesh);
-
-// Carga de modelo y animaciones
-const loader = new GLTFLoader();
 let model = null;
 let mixer = null;
 let hasSpawned = false;
-
 const clock = new THREE.Clock();
 
-log("Cargando model.glb...");
-
+// Cargar el perrete
+log("Cargando modelo 3D...");
+const loader = new GLTFLoader();
 loader.load(
     "./model.glb",
     (gltf) => {
         model = gltf.scene;
-        log("¡Modelo GLTF cargado con éxito!");
-
-        // Escala normalizada
         model.scale.set(0.5, 0.5, 0.5);
 
         if (gltf.animations && gltf.animations.length > 0) {
             mixer = new THREE.AnimationMixer(model);
             gltf.animations.forEach((clip) => {
-                const action = mixer.clipAction(clip);
-                action.play();
+                mixer.clipAction(clip).play();
             });
-            log("Animaciones iniciadas: " + gltf.animations.length);
+            log("Animaciones listas.");
         }
 
-        anchor.group.add(model);
-        model.visible = false;
+        log("Modelo cargado. Enfoca cualquier QR...");
     },
     undefined,
-    (error) => {
-        log("ERROR cargando model.glb: " + error.message);
-    }
+    (err) => log("Error cargando modelo: " + err.message)
 );
 
-anchor.onTargetFound = () => {
-    log("¡QR Detectado!");
-    if (!model || hasSpawned) return;
+// Iniciar cámara web estándar directamente (sin librerías que inyecten botones)
+async function startCamera() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" }
+        });
+        video.srcObject = stream;
+        await video.play();
+        log("Cámara activa. Escaneando fotogramas...");
+    } catch (err) {
+        log("Error al acceder a la cámara: " + err.message);
+    }
+}
 
-    requestAnimationFrame(() => {
-        anchor.group.updateMatrixWorld(true);
+// Escáner continuo de QR
+function scanQR() {
+    if (hasSpawned || !model || video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
-        const worldPosition = new THREE.Vector3();
-        const worldQuaternion = new THREE.Quaternion();
-        const worldScale = new THREE.Vector3();
+    scanCanvas.width = video.videoWidth;
+    scanCanvas.height = video.videoHeight;
+    scanCtx.drawImage(video, 0, 0, scanCanvas.width, scanCanvas.height);
 
-        anchor.group.matrixWorld.decompose(worldPosition, worldQuaternion, worldScale);
+    const imageData = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height);
 
+    if (code) {
+        log("¡QR Detectado! Haciendo nacer al perro...");
+
+        // Colocar al perro frente a la cámara en el centro de la escena 3D
+        model.position.set(0, -0.5, -2);
+        model.rotation.y = 0;
         scene.add(model);
 
-        model.position.copy(worldPosition);
-        model.quaternion.copy(worldQuaternion);
-        model.visible = true;
-
         hasSpawned = true;
-        log("Perro instanciado en posición fija.");
-    });
-};
-
-anchor.onTargetLost = () => {
-    log("QR perdido de vista.");
-    if (model && hasSpawned) {
-        model.visible = true;
+        log("¡El perro ha nacido y permanecerá aquí siempre!");
     }
-};
+}
 
-renderer.setAnimationLoop(() => {
+// Bucle principal de renderizado
+function animate() {
+    requestAnimationFrame(animate);
+
     const delta = clock.getDelta();
     if (mixer) mixer.update(delta);
-    if (hasSpawned && model) model.visible = true;
+
+    // Si aún no ha nacido, seguimos escaneando la cámara
+    if (!hasSpawned) {
+        scanQR();
+    }
+
     renderer.render(scene, camera);
+}
+
+// Ajuste al redimensionar pantalla
+window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-mindarThree.start().then(() => {
-    log("MindAR iniciado correctamente.");
-}).catch((err) => {
-    log("ERROR al iniciar MindAR: " + err);
-});
+// Arrancar proceso
+startCamera();
+animate();
