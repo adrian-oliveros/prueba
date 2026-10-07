@@ -24,7 +24,6 @@
             color: #ffffff;
         }
 
-        /* Visor 3D y AR de Google ocupando el 100% de la pantalla */
         model-viewer {
             width: 100vw;
             height: 100vh;
@@ -32,7 +31,6 @@
             --poster-color: transparent;
         }
 
-        /* Botón AR Oficial de Google (Personalizado) */
         #ar-button {
             position: fixed;
             top: 24px;
@@ -58,7 +56,6 @@
             transform: translateX(-50%) scale(0.96);
         }
 
-        /* Mensaje informativo inicial */
         #hint-badge {
             position: fixed;
             top: 80px;
@@ -75,7 +72,6 @@
             pointer-events: none;
         }
 
-        /* Selector Flotante de Vídeos / Proyectos */
         #video-selector {
             position: fixed;
             bottom: 30px;
@@ -119,7 +115,7 @@
 
     <div id="hint-badge">Arrastra para rotar en 360°</div>
 
-    <!-- Visor de Google WebXR -->
+    <!-- Visor de Google WebXR con reproducción automática de animación -->
     <model-viewer 
         id="dog-viewer"
         src="./model.glb" 
@@ -133,16 +129,14 @@
         autoplay
         exposure="1">
 
-        <!-- Botón AR personalizado que dispara la cámara nativa -->
         <button slot="ar-button" id="ar-button">
             <span>📱 Ver Perro en tu Espacio (AR)</span>
         </button>
 
     </model-viewer>
 
-    <!-- Selector Flotante de Vídeos -->
     <div id="video-selector">
-        <button class="video-btn" onclick="openLink('https://www.youtube.com')">
+        <button class="video-btn" onclick="openVideo('https://www.youtube.com')">
             🎬 Proyecto 1
         </button>
         <button class="video-btn" onclick="openVideo('https://www.youtube.com')">
@@ -154,6 +148,17 @@
     </div>
 
     <script>
+        const viewer = document.querySelector('#dog-viewer');
+
+        // Detecta automáticamente las animaciones internas del archivo model.glb y reproduce la primera
+        viewer.addEventListener('load', () => {
+            const animations = viewer.availableAnimations;
+            if (animations.length > 0) {
+                viewer.animationName = animations[0]; // Selecciona la primera animación (p. ej. Walk, Idle, Run)
+                viewer.play(); // Fuerza el inicio
+            }
+        });
+
         function openVideo(url) {
             window.open(url, "_blank");
         }
