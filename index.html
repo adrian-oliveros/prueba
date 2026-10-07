@@ -2,8 +2,8 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QR AR - Debug</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>QR AR Persistente</title>
 
     <style>
         html, body {
@@ -12,11 +12,27 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
+            background: #000;
         }
 
-        #ar-container {
+        #webcam {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
+            object-fit: cover;
+            z-index: 1;
+        }
+
+        #canvas3d {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
         }
 
         #debug-log {
@@ -27,12 +43,12 @@
             background: rgba(0,0,0,0.8);
             color: #00ff00;
             font-family: monospace;
-            font-size: 12px;
+            font-size: 11px;
             padding: 10px;
             border-radius: 8px;
-            z-index: 9999;
+            z-index: 10;
             pointer-events: none;
-            max-height: 150px;
+            max-height: 140px;
             overflow-y: auto;
         }
     </style>
@@ -41,17 +57,18 @@
     {
         "imports": {
             "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-            "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
         }
     }
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 </head>
 
 <body>
 
-<div id="debug-log">Iniciando depuración...</div>
-<div id="ar-container"></div>
+<div id="debug-log">Iniciando cámara directa...</div>
+<video id="webcam" autoplay playsinline muted></video>
+<canvas id="canvas3d"></canvas>
 
 <script type="module" src="./app.js"></script>
 
