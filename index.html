@@ -5,10 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>CV AR Portfolio</title>
 
-    <!-- Motor 3D y Detector de Imágenes -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
+    <!-- Librería unificada oficial WebAR (A-Frame + MindAR) -->
+    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
     <style>
         * {
@@ -25,15 +24,7 @@
             font-family: system-ui, -apple-system, sans-serif;
         }
 
-        #ar-container {
-            width: 100vw;
-            height: 100vh;
-            position: absolute;
-            top: 0;
-            left: 0;
-        }
-
-        /* Banner informativo en la parte superior */
+        /* Banner informativo flotante */
         #status-bar {
             position: fixed;
             top: 20px;
@@ -53,11 +44,10 @@
             width: 85%;
             max-width: 400px;
             pointer-events: none;
-            transition: opacity 0.3s ease;
         }
 
-        /* Botón gigante de inicio por si el navegador bloquea la cámara automática */
-        #start-button {
+        /* Botón de respaldo para forzar permisos de la cámara */
+        #permission-btn {
             position: fixed;
             top: 50%;
             left: 50%;
@@ -70,12 +60,11 @@
             border-radius: 30px;
             font-size: 16px;
             font-weight: bold;
-            cursor: pointer;
             box-shadow: 0 10px 30px rgba(37, 99, 235, 0.5);
             display: none;
         }
 
-        /* Selector de vídeos en la parte inferior */
+        /* Botones flotantes inferiores */
         #video-selector {
             position: fixed;
             bottom: 30px;
@@ -90,14 +79,7 @@
             border: 1px solid rgba(255, 255, 255, 0.15);
             backdrop-filter: blur(12px);
             box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.5s ease;
-        }
-
-        #video-selector.active {
-            opacity: 1;
-            pointer-events: auto;
+            display: none;
         }
 
         .video-btn {
@@ -111,17 +93,16 @@
             cursor: pointer;
             white-space: nowrap;
         }
-
-        .video-btn:active {
-            background: #2563eb;
-        }
     </style>
 </head>
 
 <body>
 
-    <div id="status-bar">Iniciando cámara...</div>
-    <button id="start-button">📷 Activar Cámara</button>
+    <div id="status-bar">Apunta la cámara al marcador de tu CV...</div>
+
+    <button id="permission-btn" onclick="solicitarPermisoCamaraDirecto()">
+        📷 Abrir Cámara
+    </button>
 
     <div id="video-selector">
         <button class="video-btn" onclick="openLink('https://www.youtube.com')">🎬 Proyecto 1</button>
@@ -129,50 +110,81 @@
         <button class="video-btn" onclick="openLink('https://www.linkedin.com')">💼 LinkedIn</button>
     </div>
 
-    <div id="ar-container"></div>
+    <!-- Escena AR Configurada para resolución y aspecto simétrico -->
+    <a-scene 
+        mindar-image="imageTargetSrc: ./qr.mind; autoStart: true; uiLoading: no; uiScanning: no;" 
+        color-space="sRGB" 
+        renderer="colorManagement: true, physicallyCorrectLights" 
+        vr-mode-ui="enabled: false" 
+        device-orientation-permission-ui="enabled: false">
+
+        <a-assets>
+            <a-asset-item id="dogModel" src="./model.glb"></a-asset-item>
+        </a-assets>
+
+        <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+        <a-entity mindar-image-target="targetIndex: 0">
+            <a-gltf-model 
+                src="#dogModel" 
+                position="0 0 0" 
+                scale="0.3 0.3 0.3" 
+                rotation="90 0 0"
+                animation-mixer>
+            </a-gltf-model>
+        </a-entity>
+
+    </a-scene>
 
     <script>
         const statusBar = document.getElementById("status-bar");
-        const startBtn = document.getElementById("start-button");
+        const permissionBtn = document.getElementById("permission-btn");
         const videoSelector = document.getElementById("video-selector");
 
-        // 1. Fuerza al navegador a pedir permiso para usar la cámara
-        async function solicitarCamara() {
+        // Detección de permisos de cámara
+        async function comprobarCamara() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-                stream.getTracks().forEach(track => track.stop()); // Cierra la prueba inicial
-                return true;
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                // Permiso concedido, cerrar stream de prueba
+                stream.getTracks().forEach(track => track.stop());
             } catch (err) {
-                statusBar.innerText = "Toca el botón azul para permitir la cámara.";
-                startBtn.style.display = "block";
-                return false;
+                // Si el navegador bloquea el cartel automático, mostrar botón azul
+                statusBar.innerText = "Se requiere permiso para usar la cámara.";
+                permissionBtn.style.display = "block";
             }
         }
 
-        async function arrancarAR() {
-            startBtn.style.display = "none";
-            statusBar.innerText = "Cargando motor de Realidad Aumentada...";
-
+        async function solicitarPermisoCamaraDirecto() {
             try {
-                const mindarThree = new window.MINDAR.IMAGE.MindARThree({
-                    container: document.querySelector("#ar-container"),
-                    imageTargetSrc: "./qr.mind",
-                    uiLoading: "no",
-                    uiScanning: "no"
-                });
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                stream.getTracks().forEach(track => track.stop());
+                location.reload(); // Recargar la página ya con el permiso guardado
+            } catch (err) {
+                alert("Debes permitir el acceso a la cámara en los ajustes de tu navegador.");
+            }
+        }
 
-                const { renderer, scene, camera } = mindarThree;
+        // Eventos de detección del objetivo
+        document.addEventListener("DOMContentLoaded", () => {
+            comprobarCamara();
 
-                // Luces para el modelo 3D
-                scene.add(new THREE.AmbientLight(0xffffff, 1.2));
-                const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-                dirLight.position.set(0, 10, 10);
-                scene.add(dirLight);
+            const sceneEl = document.querySelector('a-scene');
+            
+            sceneEl.addEventListener("targetFound", () => {
+                statusBar.innerText = "¡Marcador detectado!";
+                videoSelector.style.display = "flex";
+            });
 
-                const anchor = mindarThree.addAnchor(0);
+            sceneEl.addEventListener("targetLost", () => {
+                statusBar.innerText = "Apunta la cámara al marcador de tu CV...";
+                videoSelector.style.display = "none";
+            });
+        });
 
-                let mixer;
-                const loader = new THREE.GLTFLoader();
+        function openLink(url) {
+            window.open(url, "_blank");
+        }
+    </script>
 
-                // Carga del perrete 3D
-                loader.load("./model.glb", (gltf)
+</body>
+</html>
